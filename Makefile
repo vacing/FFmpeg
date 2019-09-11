@@ -56,6 +56,7 @@ tools/target_dem_fuzzer$(EXESUF): tools/target_dem_fuzzer.o $(FF_DEP_LIBS)
 tools/sofa2wavs$(EXESUF): ELIBS = $(FF_EXTRALIBS)
 tools/uncoded_frame$(EXESUF): $(FF_DEP_LIBS)
 tools/uncoded_frame$(EXESUF): ELIBS = $(FF_EXTRALIBS)
+tools/err2str$(EXESUF): ELIBS = $(FF_EXTRALIBS)
 tools/target_dec_%_fuzzer$(EXESUF): $(FF_DEP_LIBS)
 
 CONFIGURABLE_COMPONENTS =                                           \
