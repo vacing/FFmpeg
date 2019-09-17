@@ -3006,6 +3006,7 @@ static int read_thread(void *arg)
             }
         }
         ret = av_read_frame(ic, pkt);
+        av_log(NULL, AV_LOG_ERROR, "av_read_frame ret=%d(%s)\n", ret, av_err2str(ret));
         if (ret < 0) {
             if ((ret == AVERROR_EOF || avio_feof(ic->pb)) && !is->eof) {
                 if (is->video_stream >= 0)
