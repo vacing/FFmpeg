@@ -1384,6 +1384,7 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     struct segment *seg;
 
 restart:
+    ret = 0;
     if (!v->needed)
         return AVERROR_EOF;
 
@@ -1407,7 +1408,7 @@ restart:
 reload:
         reload_count++;
         if (reload_count > c->max_reload)
-            return AVERROR_EOF;
+            return ret < 0 ? ret : AVERROR_EOF;
         if (!v->finished &&
             av_gettime_relative() - v->last_load_time >= reload_interval) {
             if ((ret = parse_playlist(c, v->url, v, NULL)) < 0) {
@@ -1436,6 +1437,7 @@ reload:
                 av_usleep(100*1000);
             }
             /* Enough time has elapsed since the last reload */
+            ret = AVERROR_EOF;
             goto reload;
         }
 
@@ -2194,7 +2196,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         return 0;
     }
-    return AVERROR_EOF;
+    return ret < 0 ? ret : AVERROR_EOF;
 }
 
 static int hls_read_seek(AVFormatContext *s, int stream_index,
