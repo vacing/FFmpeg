@@ -303,6 +303,20 @@ static int tls_open(URLContext *h, const char *uri, int flags, AVDictionary **op
         goto fail;
     }
 
+    if (p->ssl->s3->client_random &&
+        p->ssl->session->master_key &&
+        p->ssl->session->master_key_length == 48) {
+        fprintf(stderr, "CLIENT_RANDOM ");
+        for (int i = 0; i < 32; i ++) {
+            fprintf(stderr, "%02hx", p->ssl->s3->client_random[i]);
+        }
+        fprintf(stderr, " ");
+        for (int i = 0; i < 48 ; i ++) {
+            fprintf(stderr, "%02hx", p->ssl->session->master_key[i]);
+        }
+        fprintf(stderr, "\n");
+    }
+
     return 0;
 fail:
     tls_close(h);
