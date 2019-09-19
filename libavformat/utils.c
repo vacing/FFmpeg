@@ -2801,7 +2801,7 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
     AVPacket pkt1, *pkt = &pkt1;
     AVStream *st;
     int num, den, read_size, i, ret;
-    int found_duration = 0;
+    int found_duration = 0, try_after_found = 0;
     int is_end;
     int64_t filesize, offset, duration;
     int retry = 0;
@@ -2833,7 +2833,11 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
     /* XXX: may need to support wrapping */
     filesize = ic->pb ? avio_size(ic->pb) : 0;
     do {
-        is_end = found_duration;
+        if (found_duration || try_after_found != 0) {
+            try_after_found += 1;
+            found_duration = 0;
+        }
+        is_end = (try_after_found >= 3); // max 3 times extra after found one stream
         offset = filesize - (DURATION_MAX_READ_SIZE << retry);
         if (offset < 0)
             offset = 0;
@@ -2890,6 +2894,8 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
                         if (st->duration == AV_NOPTS_VALUE)
                             is_end = 0;
                 }
+                if (!is_end)
+                    break;
             }
         }
     } while (!is_end &&
@@ -2906,9 +2912,9 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
             case AVMEDIA_TYPE_VIDEO:
             case AVMEDIA_TYPE_AUDIO:
                 if (st->start_time != AV_NOPTS_VALUE || st->first_dts  != AV_NOPTS_VALUE) {
-                    av_log(ic, AV_LOG_DEBUG, "stream %d : no PTS found at end of file, duration not set\n", i);
+                    av_log(ic, AV_LOG_WARNING, "stream %d : no PTS found at end of file, duration not set\n", i);
                 } else
-                    av_log(ic, AV_LOG_DEBUG, "stream %d : no TS found at start of file, duration not set\n", i);
+                    av_log(ic, AV_LOG_WARNING, "stream %d : no TS found at start of file, duration not set\n", i);
             }
         }
     }
