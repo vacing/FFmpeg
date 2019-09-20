@@ -692,6 +692,18 @@ int avio_get_str16be(AVIOContext *pb, int maxlen, char *buf, int buflen);
  */
 #define AVIO_FLAG_NONBLOCK 8
 
+/*
+ * Use non-seek mode.
+ * If this flag is set, read frame from context will ignore seekable flag
+ * in AVIOContext, and return frame as if the context is non-seekable,
+ * so that the packet is returned in it's physical order
+ * Warning: only can be used by ffprobe, and some format may not support 
+ * this flag.
+ * support list:
+ * 1. mov,mp4,m4a,3gp,3g2,mj2
+ */
+#define AVIO_FLAG_PHYSICAL_ORDER_FRAME  16
+
 /**
  * Use direct mode.
  * avio_read and avio_write should if possible be satisfied directly
@@ -699,6 +711,7 @@ int avio_get_str16be(AVIOContext *pb, int maxlen, char *buf, int buflen);
  * call the underlying seek function directly.
  */
 #define AVIO_FLAG_DIRECT 0x8000
+
 
 /**
  * Create and initialize a AVIOContext for accessing the
