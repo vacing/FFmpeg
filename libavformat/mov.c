@@ -7640,8 +7640,8 @@ static AVIndexEntry *mov_find_next_sample(AVFormatContext *s, AVStream **st)
             int64_t dts = av_rescale(current_sample->timestamp, AV_TIME_BASE, msc->time_scale);
             av_log(s, AV_LOG_TRACE, "stream %d, sample %d(%p), dts %"PRId64", pos %"PRId64"\n",
                     i, msc->current_sample, (void*)current_sample, dts, current_sample->pos);
-            if (!sample || (!(s->pb->seekable & AVIO_SEEKABLE_NORMAL) && current_sample->pos < sample->pos) ||
-                ((s->pb->seekable & AVIO_SEEKABLE_NORMAL) &&
+            if (!sample || ((!(s->pb->seekable & AVIO_SEEKABLE_NORMAL) || s->avio_flags & AVIO_FLAG_PHYSICAL_ORDER_FRAME) && current_sample->pos < sample->pos) ||
+                ((s->pb->seekable & AVIO_SEEKABLE_NORMAL) && !(s->avio_flags & AVIO_FLAG_PHYSICAL_ORDER_FRAME) &&
                  ((msc->pb != s->pb && dts < best_dts) || (msc->pb == s->pb &&
                  ((FFABS(best_dts - dts) <= AV_TIME_BASE && current_sample->pos < sample->pos) ||
                   (FFABS(best_dts - dts) > AV_TIME_BASE && dts < best_dts)))))) {
@@ -7651,8 +7651,8 @@ static AVIndexEntry *mov_find_next_sample(AVFormatContext *s, AVStream **st)
             }
         }
     }
-    av_log(s, AV_LOG_TRACE, "selected sample is %p, max dts jitter %"PRId64"\n",
-            (void*)sample, max_dts_jitter);
+    av_log(s, AV_LOG_TRACE, "selected sample is %p\n",
+            (void*)sample);
     return sample;
 }
 
