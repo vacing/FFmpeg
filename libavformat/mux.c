@@ -519,8 +519,6 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
         avio_write_marker(s->pb, AV_NOPTS_VALUE, AVIO_DATA_MARKER_HEADER);
     if (s->oformat->write_header) {
         ret = s->oformat->write_header(s);
-        if (ret >= 0 && s->pb && s->pb->error < 0)
-            ret = s->pb->error;
         if (ret < 0)
             goto fail;
         flush_if_needed(s);

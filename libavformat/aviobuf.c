@@ -255,8 +255,16 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
     if(!s)
         return AVERROR(EINVAL);
 
-    if ((whence & AVSEEK_SIZE))
-        return s->seek ? s->seek(s->opaque, offset, AVSEEK_SIZE) : AVERROR(ENOSYS);
+    if ((whence & AVSEEK_SIZE)) {
+        int res = 0;
+        if (!s->seek) {
+            return  AVERROR(ENOSYS);
+        }
+        if ((res = s->seek(s->opaque, offset, AVSEEK_SIZE)) < 0)
+            s->error = res;
+
+        return res;
+    }
 
     buffer_size = s->buf_end - s->buffer;
     // pos is the absolute position that the beginning of s->buffer corresponds to in the file
@@ -278,6 +286,8 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
 
     if (s->short_seek_get) {
         short_seek = s->short_seek_get(s->opaque);
+        if (short_seek < 0)
+            s->error = short_seek;
         /* fallback to default short seek */
         if (short_seek <= 0)
             short_seek = s->short_seek_threshold;
@@ -304,8 +314,10 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
         int64_t res;
 
         pos -= FFMIN(buffer_size>>1, pos);
-        if ((res = s->seek(s->opaque, pos, SEEK_SET)) < 0)
+        if ((res = s->seek(s->opaque, pos, SEEK_SET)) < 0) {
+            s->error = res;
             return res;
+        }
         s->buf_end =
         s->buf_ptr = s->buffer;
         s->pos = pos;
@@ -319,8 +331,10 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
         }
         if (!s->seek)
             return AVERROR(EPIPE);
-        if ((res = s->seek(s->opaque, offset, SEEK_SET)) < 0)
+        if ((res = s->seek(s->opaque, offset, SEEK_SET)) < 0) {
+            s->error = res;
             return res;
+        }
         s->seek_count ++;
         if (!s->write_flag)
             s->buf_end = s->buffer;
@@ -350,8 +364,11 @@ int64_t avio_size(AVIOContext *s)
         return AVERROR(ENOSYS);
     size = s->seek(s->opaque, 0, AVSEEK_SIZE);
     if (size < 0) {
-        if ((size = s->seek(s->opaque, -1, SEEK_END)) < 0)
+        s->error = size;
+        if ((size = s->seek(s->opaque, -1, SEEK_END)) < 0) {
+            s->error = size;
             return size;
+        }
         size++;
         s->seek(s->opaque, s->pos, SEEK_SET);
     }
@@ -541,9 +558,12 @@ static int read_packet_wrapper(AVIOContext *s, uint8_t *buf, int size)
         av_log(NULL, AV_LOG_WARNING, "Invalid return value 0 for stream protocol\n");
         ret = AVERROR_EOF;
     }
+
 #else
     av_assert2(ret || s->max_packet_size);
 #endif
+    if (ret < 0)
+        s->error = ret;
     return ret;
 }
 
@@ -591,7 +611,6 @@ static void fill_buffer(AVIOContext *s)
         s->eof_reached = 1;
     } else if (len < 0) {
         s->eof_reached = 1;
-        s->error= len;
     } else {
         s->pos += len;
         s->buf_ptr = dst;
@@ -665,7 +684,6 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
                     break;
                 } else if (len < 0) {
                     s->eof_reached = 1;
-                    s->error= len;
                     break;
                 } else {
                     s->pos += len;
@@ -1273,9 +1291,13 @@ void avio_print_string_array(AVIOContext *s, const char *strings[])
 
 int avio_pause(AVIOContext *s, int pause)
 {
+    int res = 0;
     if (!s->read_pause)
         return AVERROR(ENOSYS);
-    return s->read_pause(s->opaque, pause);
+    res = s->read_pause(s->opaque, pause);
+    if (res < 0)
+        s->error = res;
+    return res;
 }
 
 int64_t avio_seek_time(AVIOContext *s, int stream_index,
@@ -1291,8 +1313,13 @@ int64_t avio_seek_time(AVIOContext *s, int stream_index,
         pos = s->seek(s->opaque, 0, SEEK_CUR);
         if (pos >= 0)
             s->pos = pos;
-        else if (pos != AVERROR(ENOSYS))
-            ret = pos;
+        else {
+            s->error = pos;
+            if (pos != AVERROR(ENOSYS))
+                ret = pos;
+        }
+    } else {
+        s->error = ret;
     }
     return ret;
 }

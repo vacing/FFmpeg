@@ -4147,7 +4147,15 @@ static int get_input_packet(InputFile *f, AVPacket *pkt)
     if (nb_input_files > 1)
         return get_input_packet_mt(f, pkt);
 #endif
-    return av_read_frame(f->ctx, pkt);
+
+    f->ctx->pb->error = 0;
+    int ret = av_read_frame(f->ctx, pkt);
+    if (ret != 0 || f->ctx->pb->error != 0) {
+        av_log(f->ctx, AV_LOG_ERROR, "ret=%d(%s), error=%d(%s)\n", 
+                ret, av_err2str(ret), f->ctx->pb->error, av_err2str(f->ctx->pb->error));
+    }
+
+    return ret;
 }
 
 static int got_eagain(void)
