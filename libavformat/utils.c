@@ -3001,10 +3001,13 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st,
     if (!frame)
         return AVERROR(ENOMEM);
 
-    if (!avcodec_is_open(avctx) &&
+    if ((!avcodec_is_open(avctx) || avctx->codec_id != avctx->codec->id) &&
         st->internal->info->found_decoder <= 0 &&
         (st->codecpar->codec_id != -st->internal->info->found_decoder || !st->codecpar->codec_id)) {
         AVDictionary *thread_opt = NULL;
+
+        if (avctx->codec_id != avctx->codec->id)
+            avcodec_close(avctx);
 
         codec = find_probe_decoder(s, st, st->codecpar->codec_id);
 
