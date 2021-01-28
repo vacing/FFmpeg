@@ -103,6 +103,8 @@ typedef struct X264Context {
     int scenechange_threshold;
     int noise_reduction;
 
+    int annexb;
+
     AVDictionary *x264_params;
 
     int nb_reordered_opaque, next_reordered_opaque;
@@ -943,6 +945,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (avctx->max_b_frames < 0)
         avctx->max_b_frames = 0;
 
+    x4->params.b_annexb = x4->annexb;
+
     avctx->bit_rate = x4->params.rc.i_bitrate*1000LL;
 
     x4->enc = x264_encoder_open(&x4->params);
@@ -959,6 +963,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (!p)
             return AVERROR(ENOMEM);
 
+        if (x4->annexb) {
+
         for (i = 0; i < nnal; i++) {
             /* Don't put the SEI in extradata. */
             if (nal[i].i_type == NAL_SEI) {
@@ -972,6 +978,77 @@ FF_ENABLE_DEPRECATION_WARNINGS
             }
             memcpy(p, nal[i].p_payload, nal[i].i_payload);
             p += nal[i].i_payload;
+        }
+
+        } else {
+            uint32_t sps_size, pps_size;
+            uint8_t *sps, *pps;
+
+            for (i = 0; i < nnal; i++) {
+                /* Don't put the SEI in extradata. */
+                if (nal[i].i_type == NAL_SEI) {
+                    av_log(avctx, AV_LOG_INFO, "%s\n", nal[i].p_payload+25);
+                    x4->sei_size = nal[i].i_payload;
+                    x4->sei      = av_malloc(x4->sei_size);
+                    if (!x4->sei)
+                        return AVERROR(ENOMEM);
+                    memcpy(x4->sei, nal[i].p_payload, nal[i].i_payload);
+                } else if (nal[i].i_type == 7) { // sps
+                    sps_size = nal[i].i_payload - 4;
+                    sps      = nal[i].p_payload + 4;
+                } else if (nal[i].i_type == 8) { // pps
+                    pps_size = nal[i].i_payload - 4;
+                    pps      = nal[i].p_payload + 4;
+                }
+            }
+
+            if (!sps || !pps || sps_size < 4 || sps_size > UINT16_MAX || pps_size > UINT16_MAX) {
+                av_log(NULL, AV_LOG_ERROR, "error sps pps\n");
+                return AVERROR_INVALIDDATA;
+            }
+
+            // avio_w8(pb, 1); /* version */
+            *p = 1;
+            p++;
+            // avio_w8(pb, sps[1]); /* profile */
+            *p = sps[1];
+            p++;
+            // avio_w8(pb, sps[2]); /* profile compat */
+            *p = sps[2];
+            p++;
+            // avio_w8(pb, sps[3]); /* level */
+            *p = sps[3];
+            p++;
+            // avio_w8(pb, 0xff); /* 6 bits reserved (111111) + 2 bits nal size length - 1 (11) */
+            *p = 0xff;
+            p++;
+            // avio_w8(pb, 0xe1); /* 3 bits reserved (111) + 5 bits number of sps (00001) */
+            *p = 0xe1;
+            p++;
+
+            // avio_wb16(pb, sps_size);
+            *p = (sps_size >> 8) & 0xff;
+            p++;
+            *p = sps_size & 0xff;
+            p++;
+
+            // avio_write(pb, sps, sps_size);
+            memcpy(p, sps, sps_size);
+            p += sps_size;
+
+            // avio_w8(pb, 1); /* number of pps */
+            *p = 1;
+            p++;
+
+            // avio_wb16(pb, pps_size);
+            *p = (pps_size >> 8) & 0xff;
+            p++;
+            *p = pps_size & 0xff;
+            p++;
+
+            // avio_write(pb, pps, pps_size);
+            memcpy(p, pps, pps_size);
+            p += pps_size;
         }
         avctx->extradata_size = p - avctx->extradata;
     }
@@ -1144,6 +1221,7 @@ static const AVOption options[] = {
     { "chromaoffset", "QP difference between chroma and luma",            OFFSET(chroma_offset), AV_OPT_TYPE_INT, { .i64 = 0 }, INT_MIN, INT_MAX, VE },
     { "sc_threshold", "Scene change threshold",                           OFFSET(scenechange_threshold), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
     { "noise_reduction", "Noise reduction",                               OFFSET(noise_reduction), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
+    { "annexb",        "Output annexb",                                   OFFSET(annexb), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, VE },
 
     { "x264-params",  "Override the x264 configuration using a :-separated list of key=value parameters", OFFSET(x264_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },
     { NULL },
