@@ -33,6 +33,8 @@ typedef struct OCRContext {
     char *language;
     char *whitelist;
     char *blacklist;
+    int x, y, x_in, y_in;
+    int w, h, w_in, h_in;
 
     TessBaseAPI *tess;
 } OCRContext;
@@ -45,6 +47,10 @@ static const AVOption ocr_options[] = {
     { "language",  "set language",            OFFSET(language),  AV_OPT_TYPE_STRING, {.str="eng"}, 0, 0, FLAGS },
     { "whitelist", "set character whitelist", OFFSET(whitelist), AV_OPT_TYPE_STRING, {.str="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.:;,-+_!?\"'[]{}()<>|/\\=*&%$#@!~ "}, 0, 0, FLAGS },
     { "blacklist", "set character blacklist", OFFSET(blacklist), AV_OPT_TYPE_STRING, {.str=""},    0, 0, FLAGS },
+    { "x",         "top x of sub region",     OFFSET(x),         AV_OPT_TYPE_INT,    {.i64=0},     0, INT_MAX, FLAGS },
+    { "y",         "top y of sub region",     OFFSET(y),         AV_OPT_TYPE_INT,    {.i64=0},     0, INT_MAX, FLAGS },
+    { "w",         "width of sub region",     OFFSET(w),         AV_OPT_TYPE_INT,    {.i64=0},     0, INT_MAX, FLAGS },
+    { "h",         "height of sub region",    OFFSET(h),         AV_OPT_TYPE_INT,    {.i64=0},     0, INT_MAX, FLAGS },
     { NULL }
 };
 
@@ -93,6 +99,41 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_formats(ctx, fmts_list);
 }
 
+static void check_fix(int *x, int *y, int *w, int *h, int pic_w, int pic_h)
+{
+    // 0 <= x < pic_w
+    if (*x >= pic_w)
+        *x = 0;
+    // 0 <= y < pic_h
+    if (*y >= pic_h)
+        *y = 0;
+
+    if (*w == 0 || *w + *x > pic_w)
+        *w = pic_w - *x;
+    if (*h == 0 || *h + *y > pic_h)
+        *h = pic_h - *y;
+}
+
+static int config_input(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    OCRContext *s = ctx->priv;
+
+    s->x_in = s->x;
+    s->y_in = s->y;
+    s->w_in = s->w;
+    s->h_in = s->h;
+    check_fix(&s->x_in, &s->y_in, &s->w_in, &s->h_in, inlink->w, inlink->h);
+    if ( s->x_in != s->x || s->y_in != s->y  ||
+        (s->w != 0 && s->w_in != s->w) || (s->h != 0 && s->h_in != s->h)) {
+        av_log(s, AV_LOG_WARNING, "config error, subregion changed to "
+                                  "x=%d, y=%d, w=%d, h=%d\n",
+                                  s->x_in, s->y_in, s->w_in, s->h_in);
+    }
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVDictionary **metadata = &in->metadata;
@@ -102,8 +143,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     char *result;
     int *confs;
 
+    // TODO: support expression
     result = TessBaseAPIRect(s->tess, in->data[0], 1,
-                             in->linesize[0], 0, 0, in->width, in->height);
+                             in->linesize[0], s->x_in, s->y_in, s->w_in, s->h_in);
     confs = TessBaseAPIAllWordConfidences(s->tess);
     av_dict_set(metadata, "lavfi.ocr.text", result, 0);
     for (int i = 0; confs[i] != -1; i++) {
@@ -134,6 +176,7 @@ static const AVFilterPad ocr_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
+        .config_props = config_input,
     },
     { NULL }
 };

@@ -15457,6 +15457,14 @@ Set character whitelist.
 
 @item blacklist
 Set character blacklist.
+
+@item x, y
+Set top-left corner of the subregion, in pixels, default is (0,0).
+
+@item w, h
+Set width and height of the subregion, in pixels,
+default is the bottom-right part from given top-left corner.
+
 @end table
 
 The filter exports recognized text as the frame metadata @code{lavfi.ocr.text}.
