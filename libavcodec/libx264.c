@@ -1026,6 +1026,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
             *p = 0xe1;
             p++;
 
+            /// 有端格式问题 替换为
+            /// memcpy(p, sps_nal->p_payload + 2, sps_nal->i_payload - 2);
             // avio_wb16(pb, sps_size);
             *p = (sps_size >> 8) & 0xff;
             p++;
